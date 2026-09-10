@@ -1,0 +1,14 @@
+chroma_db/
+token.json
+venv/
+credentials.json
+homework.json
+password.json
+.env
+courses.json
+data.json
+credentials/client_secrets.json
+__pycache__/
+src/brain/services/generate_aims_encrypted.py
+credentials-login.json
+hf_context.txt

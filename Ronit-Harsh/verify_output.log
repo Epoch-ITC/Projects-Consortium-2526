@@ -1,0 +1,21 @@
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: sentence-transformers/all-mpnet-base-v2
+INFO:httpx:HTTP Request: GET https://rdfdyisiumvemjhyrlsn.supabase.co/auth/v1/admin/users?page=&per_page= "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: POST https://rdfdyisiumvemjhyrlsn.supabase.co/rest/v1/chats "HTTP/2 201 Created"
+INFO:src.brain.agent:\U0001f9e0 BRAIN: Received query: 'What is 2 + 2?' (Chat: 7daaf896-0e85-40d1-9288-41127b3ff4db, User: cda56ba2-599b-4c42-82e2-c00d662f93f8)
+INFO:httpx:HTTP Request: GET https://rdfdyisiumvemjhyrlsn.supabase.co/rest/v1/messages?select=%2A&chat_id=eq.7daaf896-0e85-40d1-9288-41127b3ff4db&order=created_at.desc&limit=20 "HTTP/2 200 OK"
+INFO:src.brain.agent:--- DEBUG: Agent passing history to Planner. Length: 1 ---
+INFO:src.brain.agent:   - HumanMessage: What is 2 + 2?...
+INFO:src.brain.agents.planner:--- DEBUG: Planner received history. Total: 1. Display (prev): 0
+INFO:src.brain.agents.planner:--- Starting Plan for: What is 2 + 2? ---
+INFO:src.brain.agents.planner:Planner decided it is done.
+INFO:httpx:HTTP Request: POST https://rdfdyisiumvemjhyrlsn.supabase.co/rest/v1/messages "HTTP/2 201 Created"
+INFO:httpx:HTTP Request: POST https://rdfdyisiumvemjhyrlsn.supabase.co/rest/v1/messages "HTTP/2 201 Created"
+--- Testing Agent Context & General Knowledge ---
+Using User ID: cda56ba2-599b-4c42-82e2-c00d662f93f8
+Created Chat ID: 7daaf896-0e85-40d1-9288-41127b3ff4db
+
+[Turn 1] User: What is 2 + 2?
+
+==================================================
+Test Failed: 'charmap' codec can't encode character '\U0001f4ca' in position 0: character maps to <undefined>
