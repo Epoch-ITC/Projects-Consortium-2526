@@ -1,0 +1,1 @@
+Manual listening of consecutive segments from the classical greedy baseline confirmed that transitions are perceptually coherent and free of audible artifacts such as clicks or abrupt discontinuities.

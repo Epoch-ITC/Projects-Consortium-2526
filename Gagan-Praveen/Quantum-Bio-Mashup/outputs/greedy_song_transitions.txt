@@ -1,0 +1,12 @@
+Classical Greedy Baseline — Song Transitions
+
+SSvid.net--Taylor-Swift-Blank-Space → happy-birthday-357371
+happy-birthday-357371 → retro-lounge-389644
+retro-lounge-389644 → we-wish-you-a-merry-christmas-444573
+we-wish-you-a-merry-christmas-444573 → SSvid.net--Taylor-Swift-Blank-Space
+SSvid.net--Taylor-Swift-Blank-Space → sweet-life-luxury-chill-438146
+sweet-life-luxury-chill-438146 → gorila-315977
+gorila-315977 → SSvid.net--Taylor-Swift-You-Belong-With-Me
+SSvid.net--Taylor-Swift-You-Belong-With-Me → gorila-315977
+gorila-315977 → SSvid.net--Taylor-Swift-You-Belong-With-Me
+SSvid.net--Taylor-Swift-You-Belong-With-Me → SSvid.net--Taylor-Swift-Blank-Space

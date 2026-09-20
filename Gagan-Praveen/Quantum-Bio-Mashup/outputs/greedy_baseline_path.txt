@@ -1,0 +1,25 @@
+[INFO] Loaded graph with 64 segments
+
+[RESULT] Classical Greedy Path:
+00 | S01_00 | song=SSvid.net--Taylor-Swift-Blank-Space | key=F
+27 | S04_03 | song=happy-birthday-357371 | key=G
+26 | S04_02 | song=happy-birthday-357371 | key=G
+47 | S06_07 | song=retro-lounge-389644 | key=F#
+46 | S06_06 | song=retro-lounge-389644 | key=F#
+44 | S06_04 | song=retro-lounge-389644 | key=F#
+43 | S06_03 | song=retro-lounge-389644 | key=F#
+42 | S06_02 | song=retro-lounge-389644 | key=F#
+41 | S06_01 | song=retro-lounge-389644 | key=F#
+40 | S06_00 | song=retro-lounge-389644 | key=F#
+62 | S08_06 | song=we-wish-you-a-merry-christmas-444573 | key=G
+01 | S01_01 | song=SSvid.net--Taylor-Swift-Blank-Space | key=F
+53 | S07_05 | song=sweet-life-luxury-chill-438146 | key=F
+21 | S03_05 | song=gorila-315977 | key=G#
+13 | S02_05 | song=SSvid.net--Taylor-Swift-You-Belong-With-Me | key=G#
+23 | S03_07 | song=gorila-315977 | key=G#
+15 | S02_07 | song=SSvid.net--Taylor-Swift-You-Belong-With-Me | key=G#
+22 | S03_06 | song=gorila-315977 | key=G#
+14 | S02_06 | song=SSvid.net--Taylor-Swift-You-Belong-With-Me | key=G#
+06 | S01_06 | song=SSvid.net--Taylor-Swift-Blank-Space | key=F
+
+Path length: 20
