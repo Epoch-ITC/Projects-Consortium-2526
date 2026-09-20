@@ -1,0 +1,10 @@
+runs/
+yolo_test_detections/
+another-bird-dataset
+birdies/
+combined-birds/
+models/
+combined-birds.zip
+src/sample_outputs/
+src/sample_inputs
+datasets/

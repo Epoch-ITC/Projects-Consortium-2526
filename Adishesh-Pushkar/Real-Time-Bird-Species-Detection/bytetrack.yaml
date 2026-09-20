@@ -1,0 +1,12 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Optimized for Bird Tracking
+
+tracker_type: bytetrack 
+track_high_thresh: 0.5    # threshold for the first association
+track_low_thresh: 0.1     # threshold for the second association
+new_track_thresh: 0.6     # threshold for init new track
+track_buffer: 60          # Increased to 60 (2 seconds at 30fps) for bird occlusions
+match_thresh: 0.8         # threshold for matching tracks
+
+# REQUIRED to fix the 'fuse_score' error:
+fuse_score: True          # Whether to fuse detection and tracking scores

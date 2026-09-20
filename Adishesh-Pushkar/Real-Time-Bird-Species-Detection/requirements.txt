@@ -1,0 +1,14 @@
+numpy
+pandas
+opencv-python
+Pillow
+torch
+torchvision
+tqdm
+kagglehub
+streamlit
+ultralytics
+sahi
+scipy
+scikit-learn
+matplotlib

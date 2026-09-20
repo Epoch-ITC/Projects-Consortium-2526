@@ -1,0 +1,66 @@
+Epoch 1/50 | Loss: 2.1768 | mAP: 0.2955 | LR: 0.000333
+--> Model Saved!
+Epoch 2/50 | Loss: 1.3237 | mAP: 0.3412 | LR: 0.000500
+--> Model Saved!
+Epoch 3/50 | Loss: 1.1308 | mAP: 0.3047 | LR: 0.000500
+Epoch 4/50 | Loss: 1.0272 | mAP: 0.3377 | LR: 0.000499
+Epoch 5/50 | Loss: 0.9159 | mAP: 0.1810 | LR: 0.000498
+Epoch 6/50 | Loss: 0.7712 | mAP: 0.4085 | LR: 0.000495
+--> Model Saved!
+Epoch 7/50 | Loss: 0.6538 | mAP: 0.3189 | LR: 0.000491
+Epoch 8/50 | Loss: 0.6335 | mAP: 0.2571 | LR: 0.000486
+Epoch 9/50 | Loss: 0.4781 | mAP: 0.3945 | LR: 0.000480
+Epoch 10/50 | Loss: 0.3973 | mAP: 0.4792 | LR: 0.000473
+--> Model Saved!
+Epoch 11/50 | Loss: 0.3672 | mAP: 0.3311 | LR: 0.000465
+Epoch 12/50 | Loss: 0.3253 | mAP: 0.4961 | LR: 0.000456
+--> Model Saved!
+Epoch 13/50 | Loss: 0.2991 | mAP: 0.3646 | LR: 0.000446
+Epoch 14/50 | Loss: 0.2724 | mAP: 0.4421 | LR: 0.000435
+Epoch 15/50 | Loss: 0.2526 | mAP: 0.3961 | LR: 0.000424
+Epoch 16/50 | Loss: 0.2335 | mAP: 0.4768 | LR: 0.000411
+Epoch 17/50 | Loss: 0.1914 | mAP: 0.5250 | LR: 0.000398
+--> Model Saved!
+Epoch 18/50 | Loss: 0.1883 | mAP: 0.5120 | LR: 0.000385
+Epoch 19/50 | Loss: 0.1780 | mAP: 0.5366 | LR: 0.000370
+--> Model Saved!
+Epoch 20/50 | Loss: 0.1700 | mAP: 0.5106 | LR: 0.000355
+Epoch 21/50 | Loss: 0.1541 | mAP: 0.5425 | LR: 0.000340
+--> Model Saved!
+Epoch 22/50 | Loss: 0.1543 | mAP: 0.5095 | LR: 0.000324
+Epoch 23/50 | Loss: 0.1306 | mAP: 0.5492 | LR: 0.000308
+--> Model Saved!
+Epoch 24/50 | Loss: 0.1209 | mAP: 0.5190 | LR: 0.000292
+Epoch 25/50 | Loss: 0.1206 | mAP: 0.5816 | LR: 0.000275
+--> Model Saved!
+Epoch 26/50 | Loss: 0.1166 | mAP: 0.5584 | LR: 0.000258
+Epoch 27/50 | Loss: 0.1079 | mAP: 0.5842 | LR: 0.000242
+--> Model Saved!
+Epoch 28/50 | Loss: 0.1052 | mAP: 0.5845 | LR: 0.000225
+--> Model Saved!
+Epoch 29/50 | Loss: 0.0928 | mAP: 0.6152 | LR: 0.000208
+--> Model Saved!
+Epoch 30/50 | Loss: 0.1049 | mAP: 0.6458 | LR: 0.000192
+--> Model Saved!
+Epoch 31/50 | Loss: 0.0902 | mAP: 0.5225 | LR: 0.000176
+Epoch 32/50 | Loss: 0.0791 | mAP: 0.5878 | LR: 0.000160
+Epoch 33/50 | Loss: 0.0906 | mAP: 0.6255 | LR: 0.000145
+Epoch 34/50 | Loss: 0.0701 | mAP: 0.6183 | LR: 0.000130
+Epoch 35/50 | Loss: 0.0695 | mAP: 0.6054 | LR: 0.000115
+Epoch 36/50 | Loss: 0.0786 | mAP: 0.6258 | LR: 0.000102
+Epoch 37/50 | Loss: 0.0661 | mAP: 0.5978 | LR: 0.000089
+Epoch 38/50 | Loss: 0.0649 | mAP: 0.6252 | LR: 0.000076
+Epoch 39/50 | Loss: 0.0592 | mAP: 0.6211 | LR: 0.000065
+Epoch 40/50 | Loss: 0.0601 | mAP: 0.6257 | LR: 0.000054
+Epoch 41/50 | Loss: 0.0630 | mAP: 0.6152 | LR: 0.000044
+Epoch 42/50 | Loss: 0.0582 | mAP: 0.6315 | LR: 0.000035
+Epoch 43/50 | Loss: 0.0587 | mAP: 0.6411 | LR: 0.000027
+Epoch 44/50 | Loss: 0.0549 | mAP: 0.6394 | LR: 0.000020
+Epoch 45/50 | Loss: 0.0512 | mAP: 0.6342 | LR: 0.000014
+Epoch 46/50 | Loss: 0.0540 | mAP: 0.6491 | LR: 0.000009
+--> Model Saved!
+Epoch 47/50 | Loss: 0.0565 | mAP: 0.6429 | LR: 0.000005
+Epoch 48/50 | Loss: 0.0518 | mAP: 0.6501 | LR: 0.000002
+--> Model Saved!
+Epoch 49/50 | Loss: 0.0492 | mAP: 0.6461 | LR: 0.000001
+Epoch 50/50 | Loss: 0.0558 | mAP: 0.6428 | LR: 0.000000
