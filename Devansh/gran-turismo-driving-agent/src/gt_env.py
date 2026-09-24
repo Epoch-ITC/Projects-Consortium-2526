@@ -1,0 +1,477 @@
+"""
+GranTurismoEnv v3 — Hybrid
+───────────────────────────
+v1 observations (masks) + v2 reward/hyperparams + wrong-direction termination.
+"""
+
+import time
+from collections import deque
+
+import cv2
+import gymnasium as gym
+import numpy as np
+from gymnasium import spaces
+
+from src.virtual_controller import VirtualController
+from src.vision import VisionInterface
+
+
+class GranTurismoEnv(gym.Env):
+    def __init__(self, camera_index=0):
+        super().__init__()
+        self.controller = VirtualController()
+        self.vision = VisionInterface(camera_index)
+
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+
+        # Dict observation: mask channels + proprioceptive aux
+        self.observation_space = spaces.Dict(
+            {
+                "frame": spaces.Box(low=0, high=255, shape=(64, 64, 3), dtype=np.uint8),
+                "aux": spaces.Box(low=-1.0, high=1.0, shape=(8,), dtype=np.float32),
+            }
+        )
+
+        # Episode state
+        self.max_steps = 5000  # ~3min at 27 FPS (lap takes ~2min)
+        self.current_step = 0
+        self.episode_reward = 0.0
+        self.current_speed = 0
+        self.prev_progress = 0.0
+        self.estimated_speed = 0.0
+        self.progress_at_gate = None  # Snapshot for progress gate check
+
+        # Buffers
+        self.pos_buffer = deque(maxlen=30)
+        self.progress_buffer = deque(maxlen=5)
+
+        # Waypoint system — using dense 451-point track path
+        self.NUM_WAYPOINTS = 451
+        self.max_waypoint_idx = -1
+        self._start_waypoint = 0
+
+        # Action history (Paper 1: 3-step steering + gas history)
+        self.steer_history = deque([0.0, 0.0, 0.0], maxlen=3)
+        self.gas_history = deque([0.0, 0.0, 0.0], maxlen=3)
+
+        # Temporal
+        self.last_step_time = time.time()
+
+        # Curriculum
+        self.curriculum_stage = 1
+        self.lap_completions = 0
+        self.episode_count = 0
+
+        # Dashboard
+        self.render_interval = 5
+
+        # Termination thresholds — fixed step counts at 20fps baseline
+        # Loosened from v1 (1200/240) but tighter than original broken values
+        # Stagnation at 300 = 15s: within 0.99^300=0.05 gamma horizon, but enough for corners
+        self.FPS_BASELINE = 20
+        self.GRACE_STEPS = int(10.0 * self.FPS_BASELINE)  # 200  — no kills during start
+        self.STAGNATION_STEPS = int(
+            15.0 * self.FPS_BASELINE
+        )  # 300  — was 100, minimap noise killed corners
+        # WRONG_DIRECTION removed — punished recovery attempts, taught agent to stay at walls
+
+    def _print_episode_stats(self, reason):
+        print("\n" + "=" * 45)
+        print(f"🏁  EPISODE SUMMARY | {reason}")
+        print("-" * 45)
+        print(f"   Steps:       {self.current_step}")
+        print(f"   Total Rew:   {self.episode_reward:.2f}")
+        print(
+            f"   Avg/Step:    {(self.episode_reward / max(1, self.current_step)):.4f}"
+        )
+        print(f"   Laps Done:   {self.vision.last_detected_lap - 1}")
+        print("=" * 45 + "\n")
+
+    def step(self, action):
+        now = time.time()
+        dt = now - self.last_step_time
+        self.last_step_time = now
+        dt = np.clip(dt, 1.0 / 60.0, 1.0)
+        fps = 1.0 / dt
+        # Smoothed fps for display only (not used for threshold calculations)
+        if not hasattr(self, "_fps_smooth"):
+            self._fps_smooth = fps
+        self._fps_smooth = 0.95 * self._fps_smooth + 0.05 * fps
+        fps_display = self._fps_smooth
+
+        self.current_step += 1
+
+        # 1. ACT
+        steer, gas = float(action[0]), float(action[1])
+        self.controller.step(steering=steer, gas_brake=gas)
+        self.steer_history.append(steer)
+        self.gas_history.append(gas)
+
+        # 2. OBSERVE — single frame
+        raw_frame = self.vision.get_frame()
+        if raw_frame is None:
+            return self._get_empty_obs(), 0.0, True, False, {"reason": "CAMERA_LOST"}
+
+        # 3. VISION — each channel computed once
+        line_channel, line_pos = self.vision.get_line_channel(raw_frame)
+        road_channel = self.vision.get_road_channel(raw_frame)
+        brake_channel = self.vision.get_brake_channel(raw_frame)
+        is_collision = self.vision.check_collision(raw_frame)
+
+        # 4. PROGRESS (smoothed)
+        progress_data = self.vision.get_progress_percent(raw_frame)
+        raw_progress = (
+            progress_data[0]
+            if progress_data and progress_data[0] is not None
+            else self.prev_progress
+        )
+        self.progress_buffer.append(raw_progress)
+        current_progress = float(np.median(list(self.progress_buffer)))
+
+        # 5. DISPLACEMENT
+        current_pos = self.vision.get_map_position(raw_frame)
+        if current_pos is not None:
+            self.pos_buffer.append(current_pos)
+        elif len(self.pos_buffer) > 0:
+            self.pos_buffer.append(self.pos_buffer[-1])
+
+        displacement = 0.0
+        if len(self.pos_buffer) >= 2:
+            displacement = np.linalg.norm(
+                np.array(self.pos_buffer[-1]) - np.array(self.pos_buffer[0])
+            )
+
+        if len(self.pos_buffer) >= 2:
+            instant_disp = np.linalg.norm(
+                np.array(self.pos_buffer[-1]) - np.array(self.pos_buffer[-2])
+            )
+        else:
+            instant_disp = 0.0
+        self.estimated_speed = instant_disp / dt
+
+        # ═══════════════════════════════════
+        # 6. REWARD — waypoint + time penalty
+        # ═══════════════════════════════════
+
+        # A. Waypoint — dense gating for 451 points
+        current_wp = int(current_progress * self.NUM_WAYPOINTS) % self.NUM_WAYPOINTS
+        r_progress = 0.0
+        if self.max_waypoint_idx == -1:
+            self.max_waypoint_idx = current_wp
+            self._start_waypoint = current_wp
+            self._last_wp_step = self.current_step
+        else:
+            fwd_dist = (current_wp - self.max_waypoint_idx) % self.NUM_WAYPOINTS
+            if 0 < fwd_dist <= self.NUM_WAYPOINTS // 2:  # forward motion
+                if fwd_dist <= 15:  # genuine advancement (up to ~3% of track per step)
+                    r_progress = 3.3 * fwd_dist
+                    self._last_wp_step = self.current_step
+                    self.max_waypoint_idx = current_wp  # instantly catch up
+                else:
+                    # Noise jump: slowly crawl forward to try and catch up safely
+                    self.max_waypoint_idx = (
+                        self.max_waypoint_idx + 1
+                    ) % self.NUM_WAYPOINTS
+            # fwd_dist > half = backward, ignore
+        progress_delta = current_progress - self.prev_progress
+        if progress_delta < -0.5:  # Lap wraparound
+            progress_delta = (1.0 - self.prev_progress) + current_progress
+        self.prev_progress = current_progress
+
+        # B. Time penalty — small nudge to finish fast (was -0.1, which punished long clean laps)
+        r_time = -0.02
+
+        # C. Steering change penalty
+        steer_delta = abs(steer - self.steer_history[-2])
+        r_steer = -steer_delta * 0.3
+
+        reward = r_progress + r_time + r_steer
+
+        # 7. TERMINATIONS
+        terminated = False
+        reason = ""
+        in_grace = self.current_step < self.GRACE_STEPS
+
+        # OCR speed + lap check (every 30 steps — OCR only for lap detection + display)
+        if self.current_step % 30 == 0:
+            self.current_speed = self.vision.get_speed(raw_frame)
+            if self.vision.check_lap_change(
+                raw_frame, self.current_step, fps, self.current_speed
+            ):
+                reward += 1000.0
+                terminated = True
+                reason = "LAP COMPLETED"
+                self._update_curriculum(lap_completed=True)
+
+        # Stagnation: only termination — covers stuck, loiter, wrong-dir all in one
+        # STUCK/LOITER removed: were redundant with stagnation and misfired on corners
+        steps_since_wp = self.current_step - getattr(self, "_last_wp_step", 0)
+        if not terminated:
+            if not in_grace and steps_since_wp > self.STAGNATION_STEPS:
+                reward += -50.0
+                terminated = True
+                reason = "STAGNATION"
+
+            # Max steps
+            if self.current_step >= self.max_steps:
+                terminated = True
+                reason = "MAX_STEPS"
+
+        # 8. BUILD OBS
+        frame_obs = np.stack([line_channel, road_channel, brake_channel], axis=-1)
+        aux = self._build_aux()
+        obs = {"frame": frame_obs, "aux": aux}
+
+        # 9. RENDER (throttled)
+        if self.current_step % self.render_interval == 0:
+            self._render_dashboard(
+                obs_frame=frame_obs,
+                l_pos=line_pos,
+                rew=reward,
+                action=action,
+                fps=fps_display,
+                crash=is_collision,
+                r_prog=r_progress,
+                r_time=r_time,
+                r_steer=r_steer,
+                displacement=displacement,
+                stag_frames=steps_since_wp,
+                stag_max=self.STAGNATION_STEPS,
+                has_line=(line_pos is not None),
+            )
+
+        self.episode_reward += reward
+        if terminated:
+            self._print_episode_stats(reason)
+            self._check_curriculum_advance()
+
+        return obs, float(reward), terminated, False, {"reason": reason}
+
+    def _build_aux(self):
+        """
+        8-dim proprioceptive vector:
+          [speed, progress, steer×3, gas×3]
+        """
+        speed_norm = min(1.0, self.estimated_speed / 50.0)
+        return np.array(
+            [
+                speed_norm,
+                self.prev_progress,
+                self.steer_history[-1],
+                self.steer_history[-2],
+                self.steer_history[-3],
+                self.gas_history[-1],
+                self.gas_history[-2],
+                self.gas_history[-3],
+            ],
+            dtype=np.float32,
+        )
+
+    def _render_dashboard(
+        self,
+        obs_frame,
+        l_pos,
+        rew,
+        action,
+        fps,
+        crash,
+        r_prog,
+        r_time,
+        r_steer,
+        displacement,
+        stag_frames,
+        stag_max,
+        has_line,
+    ):
+        try:
+            W, H = 480, 380
+            db = np.zeros((H, W, 3), dtype=np.uint8)
+            f = cv2.FONT_HERSHEY_SIMPLEX
+            WHITE = (220, 220, 220)
+            DIM = (100, 100, 100)
+            CYAN = (0, 255, 255)
+
+            # ── ROW 1: VISION CHANNELS ──
+            cv2.putText(db, "AGENT VISION", (10, 14), f, 0.35, CYAN, 1)
+            labels = ["LINE", "ROAD", "BRAKE", "STACK"]
+            colors = [(255, 200, 0), (0, 255, 0), (0, 0, 255), WHITE]
+            for i in range(3):
+                ch = cv2.cvtColor(obs_frame[:, :, i], cv2.COLOR_GRAY2BGR)
+                ch = cv2.resize(ch, (64, 64))
+                x0 = 10 + i * 74
+                db[20:84, x0 : x0 + 64] = ch
+                cv2.putText(db, labels[i], (x0 + 15, 96), f, 0.28, colors[i], 1)
+            # Composite
+            rgb = cv2.resize(obs_frame, (64, 64))
+            db[20:84, 232:296] = rgb
+            cv2.putText(db, "STACK", (240, 96), f, 0.28, WHITE, 1)
+
+            # ── STATS ──
+            sx = 320
+            fps_col = (
+                (0, 255, 0) if fps > 10 else (0, 165, 255) if fps > 6 else (0, 0, 255)
+            )
+            cv2.putText(db, f"FPS: {fps:.0f}", (sx, 28), f, 0.45, fps_col, 2)
+
+            ocr_spd = self.current_speed if self.current_speed else 0
+            cv2.putText(db, f"SPD: {ocr_spd} km/h", (sx, 48), f, 0.33, WHITE, 1)
+            cv2.putText(db, f"STEP: {self.current_step}", (sx, 64), f, 0.3, DIM, 1)
+            wp_crossed = (
+                (self.max_waypoint_idx - self._start_waypoint) % self.NUM_WAYPOINTS
+                if self.max_waypoint_idx >= 0
+                else 0
+            )
+            cv2.putText(
+                db,
+                f"WP: {wp_crossed}/{self.NUM_WAYPOINTS}  {self.prev_progress * 100:.0f}%",
+                (sx, 80),
+                f,
+                0.28,
+                (0, 255, 255),
+                1,
+            )
+
+            r_col = (0, 255, 0) if rew >= 0 else (0, 0, 255)
+            cv2.putText(db, f"{rew:+.1f}", (sx, 110), f, 0.7, r_col, 2)
+            cv2.putText(
+                db, f"EP: {self.episode_reward:+.0f}", (sx, 128), f, 0.3, DIM, 1
+            )
+
+            if crash:
+                status, st_col = "CRASH", (0, 0, 255)
+            elif not has_line:
+                status, st_col = "NO LINE", (0, 100, 255)
+            elif rew > 0.1:
+                status, st_col = "RACING", (0, 255, 0)
+            else:
+                status, st_col = "DRIVING", (200, 200, 200)
+            cv2.putText(db, status, (sx, 155), f, 0.5, st_col, 2)
+
+            # ── REWARDS ──
+            ry = 110
+            cv2.putText(db, "REWARDS", (10, ry), f, 0.33, CYAN, 1)
+
+            def _rc(v):
+                return (0, 255, 0) if v > 0.01 else (0, 0, 255) if v < -0.01 else DIM
+
+            for i, (name, val) in enumerate(
+                [("Progress", r_prog), ("Time", r_time), ("Steer Δ", r_steer)]
+            ):
+                y = ry + 15 + i * 16
+                cv2.putText(db, f"{name}:", (10, y), f, 0.28, DIM, 1)
+                cv2.putText(db, f"{val:+.3f}", (85, y), f, 0.28, _rc(val), 1)
+            tot_y = ry + 15 + 3 * 16
+            cv2.line(db, (10, tot_y - 3), (160, tot_y - 3), (50, 50, 50), 1)
+            cv2.putText(db, f"TOTAL: {rew:+.3f}", (10, tot_y + 10), f, 0.33, r_col, 1)
+
+            # ── TIMERS ──
+            ty = tot_y + 22
+            cv2.putText(db, "TIMERS", (10, ty), f, 0.33, CYAN, 1)
+            bar_w = 140
+            for i, (name, frames, limit, color) in enumerate(
+                [
+                    ("STAG", stag_frames, stag_max, (180, 0, 180)),
+                ]
+            ):
+                y = ty + 14 + i * 18
+                cv2.putText(db, name, (10, y + 3), f, 0.26, DIM, 1)
+                cv2.rectangle(db, (60, y - 3), (60 + bar_w, y + 6), (30, 30, 30), -1)
+                fill = int((min(frames, limit) / max(1, limit)) * bar_w)
+                cv2.rectangle(db, (60, y - 3), (60 + fill, y + 6), color, -1)
+
+            # ── STEERING ──
+            sy = ty + 14 + 3 * 18 + 8
+            cv2.putText(db, "STEER", (10, sy), f, 0.26, DIM, 1)
+            cx = 130
+            cv2.line(db, (60, sy - 3), (200, sy - 3), (40, 40, 40), 5)
+            cv2.line(db, (cx, sy - 7), (cx, sy + 1), DIM, 1)
+            steer_x = cx + int(action[0] * 70)
+            cv2.line(db, (cx, sy - 3), (steer_x, sy - 3), WHITE, 5)
+
+            cv2.putText(
+                db,
+                f"STAGE {self.curriculum_stage}",
+                (sx, H - 8),
+                f,
+                0.28,
+                (200, 200, 100),
+                1,
+            )
+
+            cv2.imshow("GT Telemetry v3", db)
+            cv2.waitKey(1)
+        except Exception as e:
+            print(f"⚠️ Dash: {e}")
+
+    def reset(self, *, seed=None, options=None):
+        super().reset(seed=seed, options=options)
+
+        allowed_slots = self._get_curriculum_slots()
+        target_slot = np.random.choice(allowed_slots)
+        self.controller.load_save_state(target_slot)
+        time.sleep(1.5)
+
+        self.current_step = 0
+        self.episode_reward = 0.0
+        self._gate_fired = False
+        self.pos_buffer.clear()
+        self.current_speed = 0
+        self.prev_progress = 0.0
+        self.estimated_speed = 0.0
+        self.progress_at_gate = None
+        self.last_step_time = time.time()
+        self.progress_buffer.clear()
+        self.max_waypoint_idx = -1
+        self._last_wp_step = 0
+        self.steer_history = deque([0.0, 0.0, 0.0], maxlen=3)
+        self.gas_history = deque([0.0, 0.0, 0.0], maxlen=3)
+
+        self.vision.reset_lap()
+
+        raw_frame = self.vision.get_frame()
+        if raw_frame is None:
+            return self._get_empty_obs(), {}
+
+        line_ch, _ = self.vision.get_line_channel(raw_frame)
+        road_ch = self.vision.get_road_channel(raw_frame)
+        brake_ch = self.vision.get_brake_channel(raw_frame)
+        frame_obs = np.stack([line_ch, road_ch, brake_ch], axis=-1)
+        aux = self._build_aux()
+        obs = {"frame": frame_obs, "aux": aux}
+
+        print(
+            f"🔄 Episode Started - Slot: {target_slot}, Stage: {self.curriculum_stage}"
+        )
+        return obs, {}
+
+    def _get_curriculum_slots(self):
+        if self.curriculum_stage == 1:
+            return [0]
+        elif self.curriculum_stage == 2:
+            return [0, 1]
+        return [0, 1, 2]
+
+    def _get_empty_obs(self):
+        return {
+            "frame": np.zeros((64, 64, 3), dtype=np.uint8),
+            "aux": np.zeros((8,), dtype=np.float32),
+        }
+
+    def _update_curriculum(self, lap_completed):
+        if lap_completed:
+            self.lap_completions += 1
+
+    def _check_curriculum_advance(self):
+        self.episode_count += 1
+        if self.episode_count >= 50:
+            rate = self.lap_completions / self.episode_count
+            if rate >= 0.2 and self.curriculum_stage < 3:
+                self.curriculum_stage += 1
+                print(f"📚 Curriculum advanced to Stage {self.curriculum_stage}")
+                self.lap_completions = 0
+                self.episode_count = 0
+
+    def close(self):
+        self.vision.cap.release()
+        cv2.destroyAllWindows()
+        self.controller.close()
